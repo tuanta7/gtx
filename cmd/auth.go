@@ -1,39 +1,89 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
 	"fmt"
+	"os/exec"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/tuanta7/tig/internal/config"
+	"github.com/tuanta7/tig/internal/oauth"
+)
+
+var (
+	tokenFlag    string
+	providerFlag string
 )
 
 // authCmd represents the auth command
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Authenticate with GitHub",
+	Long: `Authenticate with GitHub using a personal access token or device authorization flow.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("auth called")
+Examples:
+  # Authenticate using device authorization flow (interactive)
+  tig auth
+	
+  # Specify provider (currently only github is supported)
+  tig auth --provider github
+
+  # Authenticate using a personal access token
+  tig auth --token ghp_xxxxxxxxxxxx`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if providerFlag != oauth.GitHubProvider {
+			return fmt.Errorf("unsupported provider: %s (only 'github' is currently supported)", providerFlag)
+		}
+
+		var token string
+
+		om := oauth.NewManager()
+		om.Register(oauth.NewGitHubStrategy(
+			config.GitHubOAuthClientID,
+			config.GitHubDeviceCodeURL,
+			config.GitHubAccessTokenURL,
+		))
+
+		if tokenFlag != "" {
+			token = tokenFlag
+		} else {
+			s := om.GetStrategy(providerFlag)
+			deviceCode, err := s.AuthorizeDevice()
+			if err != nil {
+				return fmt.Errorf("device authorization failed: %w", err)
+			}
+
+			fmt.Println("Copy your one-time code:", deviceCode.UserCode)
+			fmt.Printf("Click to open in your browser\n%s", deviceCode.VerificationURI)
+			_, _ = fmt.Scanln()
+
+			tryOpenBrowser(deviceCode.VerificationURI)
+
+			token, err = s.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
+			if err != nil {
+				return fmt.Errorf("failed to poll access token: %w", err)
+			}
+		}
+
+		if err := om.SaveToken(token); err != nil {
+			return fmt.Errorf("failed to save token: %w", err)
+		}
+
+		return nil
 	},
+}
+
+func tryOpenBrowser(url string) {
+	commands := []string{"xdg-open", "open", "sensible-browser"}
+	for _, cmd := range commands {
+		if err := exec.Command(cmd, url).Start(); err == nil {
+			return
+		}
+	}
 }
 
 func init() {
 	rootCmd.AddCommand(authCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// authCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// authCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	authCmd.Flags().StringVar(&tokenFlag, "token", "", "Your personal access token")
+	authCmd.Flags().StringVar(&providerFlag, "provider", oauth.GitHubProvider, "OAuth provider (currently only 'github' is supported)")
 }

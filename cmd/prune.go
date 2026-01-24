@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tuanta7/tig/internal/manager"
+	"github.com/tuanta7/tig/internal/git"
 )
 
 var (
@@ -35,7 +35,10 @@ Examples:
   # Prune with custom remote and commit message
   tig prune --remote upstream --message "Fresh start"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		git := manager.NewGit()
+		repo, err := git.OpenRepository(prunePath)
+		if err != nil {
+			return fmt.Errorf("failed to open repository: %w", err)
+		}
 
 		if prunePath == "" {
 			cwd, err := os.Getwd()
@@ -49,7 +52,7 @@ Examples:
 		fmt.Printf("Remote: %s\n", pruneRemote)
 		fmt.Printf("Commit message: %s\n", pruneMessage)
 
-		err := git.PruneHistory(prunePath, pruneRemote, pruneMessage)
+		err = repo.Prune(prunePath, pruneRemote, pruneMessage)
 		if err != nil {
 			return fmt.Errorf("failed to prune history: %w", err)
 		}
