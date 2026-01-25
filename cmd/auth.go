@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tuanta7/tig/internal/config"
-	"github.com/tuanta7/tig/internal/oauth"
+	"github.com/tuanta7/tig/internal/token"
 )
 
 var (
-	tokenFlag    string
+	tokenFlag    bool
 	providerFlag string
 )
 
@@ -29,26 +29,36 @@ Examples:
   tig auth --provider github
 
   # Authenticate using a personal access token
-  tig auth --token ghp_xxxxxxxxxxxx`,
+  tig auth --token`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if providerFlag != oauth.GitHubProvider {
+		if providerFlag != token.GitHubProvider {
 			return fmt.Errorf("unsupported provider: %s (only 'github' is currently supported)", providerFlag)
 		}
 
-		var token string
+		var err error
+		var accessToken string
+		var strategy token.AuthStrategy
 
-		om := oauth.NewManager()
-		om.Register(oauth.NewGitHubStrategy(
-			config.GitHubOAuthClientID,
-			config.GitHubDeviceCodeURL,
-			config.GitHubAccessTokenURL,
-		))
+		if tokenFlag {
+			// Only support GitHub for now
+			strategy, err = manager.GetStrategy(token.PATProvider)
+			if err != nil {
+				return fmt.Errorf("failed to get strategy: %w", err)
+			}
 
-		if tokenFlag != "" {
-			token = tokenFlag
+			tryOpenBrowser(config.GitHubTokensPage)
+			fmt.Print("Enter your personal access token: ")
+			_, err := fmt.Scanln(&accessToken)
+			if err != nil {
+				return fmt.Errorf("failed to read token: %w", err)
+			}
 		} else {
-			s := om.GetStrategy(providerFlag)
-			deviceCode, err := s.AuthorizeDevice()
+			strategy, err = manager.GetStrategy(providerFlag)
+			if err != nil {
+				return fmt.Errorf("failed to get strategy: %w", err)
+			}
+
+			deviceCode, err := strategy.AuthorizeDevice()
 			if err != nil {
 				return fmt.Errorf("device authorization failed: %w", err)
 			}
@@ -59,13 +69,13 @@ Examples:
 
 			tryOpenBrowser(deviceCode.VerificationURI)
 
-			token, err = s.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
+			accessToken, err = strategy.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
 			if err != nil {
 				return fmt.Errorf("failed to poll access token: %w", err)
 			}
 		}
 
-		if err := om.SaveToken(token); err != nil {
+		if err := strategy.SaveToken(accessToken); err != nil {
 			return fmt.Errorf("failed to save token: %w", err)
 		}
 
@@ -84,6 +94,6 @@ func tryOpenBrowser(url string) {
 
 func init() {
 	rootCmd.AddCommand(authCmd)
-	authCmd.Flags().StringVar(&tokenFlag, "token", "", "Your personal access token")
-	authCmd.Flags().StringVar(&providerFlag, "provider", oauth.GitHubProvider, "OAuth provider (currently only 'github' is supported)")
+	authCmd.Flags().BoolVar(&tokenFlag, "token", false, "Your personal access token")
+	authCmd.Flags().StringVar(&providerFlag, "provider", token.GitHubProvider, "OAuth provider (currently only 'github' is supported)")
 }

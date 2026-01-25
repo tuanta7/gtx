@@ -1,4 +1,4 @@
-package oauth
+package token
 
 import (
 	"bytes"
@@ -15,13 +15,15 @@ type GitHubStrategy struct {
 	clientID       string
 	deviceCodeURL  string
 	accessTokenURL string
+	userProfileURL string
 }
 
-func NewGitHubStrategy(clientID, deviceCodeURL, accessTokenURL string) *GitHubStrategy {
+func NewGitHubStrategy(clientID, deviceCodeURL, accessTokenURL, userProfileURL string) *GitHubStrategy {
 	return &GitHubStrategy{
 		clientID:       clientID,
 		deviceCodeURL:  deviceCodeURL,
 		accessTokenURL: accessTokenURL,
+		userProfileURL: userProfileURL,
 	}
 }
 
@@ -35,7 +37,7 @@ func (g *GitHubStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {
 	bodyForm.Set("scope", "repo,read:org")
 	body := bytes.NewBufferString(bodyForm.Encode())
 
-	req, err := http.NewRequest("POST", g.deviceCodeURL, body)
+	req, err := http.NewRequest(http.MethodPost, g.deviceCodeURL, body)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +79,7 @@ func (g *GitHubStrategy) PollAccessToken(deviceCode string, interval time.Durati
 		if err != nil {
 			return "", err
 		}
+
 		if token != "" {
 			return token, nil
 		}
@@ -90,7 +93,7 @@ func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
 	bodyForm.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
 	body := bytes.NewBufferString(bodyForm.Encode())
 
-	req, err := http.NewRequest("POST", g.accessTokenURL, body)
+	req, err := http.NewRequest(http.MethodPost, g.accessTokenURL, body)
 	if err != nil {
 		return "", err
 	}
@@ -129,4 +132,45 @@ func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
 	default:
 		return "", fmt.Errorf("authentication error: %s", tokenResp.Error)
 	}
+}
+
+func (g *GitHubStrategy) SaveToken(token string) error {
+	return saveToken(g.Provider(), token)
+}
+
+func (g *GitHubStrategy) FetchUser(token string) (*User, error) {
+	req, err := http.NewRequest(http.MethodGet, g.userProfileURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var user struct {
+		Login string `json:"login"`
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, err
+	}
+
+	return &User{
+		Login: user.Login,
+		Name:  user.Name,
+		Email: user.Email,
+	}, nil
 }
