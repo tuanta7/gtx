@@ -46,23 +46,10 @@ func (r *Repository) Prune(path, remote, commitMessage string) error {
 		return err
 	}
 
-	upstreamRemote, err := repo.CreateRemote(&config.RemoteConfig{
+	_, err = repo.CreateRemote(&config.RemoteConfig{
 		Name: remote,
 		URLs: []string{upstreamURL},
 	})
-	if err != nil {
-		return err
-	}
 
-	err = upstreamRemote.Push(&gogit.PushOptions{
-		RemoteName: remote,
-		RemoteURL:  upstreamURL,
-		Force:      true,
-		Progress:   os.Stdout,
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }

@@ -1,6 +1,6 @@
 # Tig
 
-Delete old commits and rewrite repository history.
+Git command extensions.
 
 The primary purpose of this tool is to automate these actions:
 

@@ -10,7 +10,8 @@ import (
 
 const (
 	PATProvider    = "pat"
-	GitHubProvider = "github"
+	GitHubProvider = "github.com"
+	GitLabProvider = "gitlab.com"
 )
 
 var AllProviders = []string{
@@ -70,12 +71,12 @@ func (m *Manager) GetStrategy(provider string) (AuthStrategy, error) {
 }
 
 func (m *Manager) LoadToken() (string, string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", "", err
 	}
 
-	tokenFile := filepath.Join(configDir, "tig", "token")
+	tokenFile := filepath.Join(configDir, ".netrc")
 	data, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return "", "", err

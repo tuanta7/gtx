@@ -7,17 +7,12 @@ import (
 )
 
 func saveToken(provider, token string) error {
-	configDir, err := os.UserConfigDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 
-	tigDir := filepath.Join(configDir, "tig")
-	if err := os.MkdirAll(tigDir, 0700); err != nil {
-		return err
-	}
-
-	tokenFile := filepath.Join(tigDir, "token")
+	tokenFile := filepath.Join(homeDir, ".netrc")
 	contents := fmt.Sprintf("%s:%s", provider, token)
 	return os.WriteFile(tokenFile, []byte(contents), 0600)
 }
