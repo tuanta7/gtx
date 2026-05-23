@@ -19,7 +19,7 @@ func (p *PATStrategy) Provider() string {
 }
 
 func (p *PATStrategy) SaveToken(token string) error {
-	return saveToken(p.provider, token)
+	return saveToken(token)
 }
 
 func (p *PATStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {

@@ -1,99 +1,120 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tuanta7/tig/internal/config"
-	"github.com/tuanta7/tig/internal/token"
+	"github.com/tuanta7/gtx/internal/config"
+	"github.com/tuanta7/gtx/internal/token"
 )
 
-var (
-	tokenFlag    bool
-	providerFlag string
-)
+var tokenFlag bool
 
-// authCmd represents the auth command
+var openBrowser = tryOpenBrowser
+
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Authenticate with GitHub",
-	Long: `Authenticate with GitHub using a personal access token or device authorization flow.
-
-Examples:
-  # Authenticate using device authorization flow (interactive)
-  tig auth
-	
-  # Specify provider (currently only github is supported)
-  tig auth --provider github
+	Long: `Authenticate with GitHub using GitHub Device Authorization by default.
+Use --token only when you need to enter a personal access token manually.`,
+	Example: `  # Authenticate with GitHub device authorization
+  gtx auth
 
   # Authenticate using a personal access token
-  tig auth --token`,
+  gtx auth --token`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if providerFlag != token.GitHubProvider {
-			return fmt.Errorf("unsupported provider: %s (only 'github' is currently supported)", providerFlag)
+		strategy, err := manager.GetStrategy(token.GitHubProvider)
+		if err != nil {
+			return fmt.Errorf("failed to get GitHub auth strategy: %w", err)
 		}
 
-		var err error
 		var accessToken string
-		var strategy token.AuthStrategy
-
 		if tokenFlag {
-			// Only support GitHub for now
-			strategy, err = manager.GetStrategy(token.PATProvider)
+			accessToken, err = authenticateWithToken(cmd.OutOrStdout(), cmd.InOrStdin())
 			if err != nil {
-				return fmt.Errorf("failed to get strategy: %w", err)
-			}
-
-			tryOpenBrowser(config.GitHubTokensPage)
-			fmt.Print("Enter your personal access token: ")
-			_, err := fmt.Scanln(&accessToken)
-			if err != nil {
-				return fmt.Errorf("failed to read token: %w", err)
+				return err
 			}
 		} else {
-			strategy, err = manager.GetStrategy(providerFlag)
+			accessToken, err = authenticateWithDeviceFlow(cmd.OutOrStdout(), strategy)
 			if err != nil {
-				return fmt.Errorf("failed to get strategy: %w", err)
+				return err
 			}
+		}
 
-			deviceCode, err := strategy.AuthorizeDevice()
-			if err != nil {
-				return fmt.Errorf("device authorization failed: %w", err)
-			}
-
-			fmt.Println("Copy your one-time code:", deviceCode.UserCode)
-			fmt.Printf("Click to open in your browser\n%s", deviceCode.VerificationURI)
-			_, _ = fmt.Scanln()
-
-			tryOpenBrowser(deviceCode.VerificationURI)
-
-			accessToken, err = strategy.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
-			if err != nil {
-				return fmt.Errorf("failed to poll access token: %w", err)
-			}
+		user, err := strategy.FetchUser(accessToken)
+		if err != nil {
+			return fmt.Errorf("failed to validate GitHub token: %w", err)
 		}
 
 		if err := strategy.SaveToken(accessToken); err != nil {
-			return fmt.Errorf("failed to save token: %w", err)
+			return fmt.Errorf("failed to save GitHub token: %w", err)
 		}
 
+		fmt.Fprintf(cmd.OutOrStdout(), "Authenticated with GitHub as %s\n", user.Login)
 		return nil
 	},
 }
 
-func tryOpenBrowser(url string) {
+func authenticateWithDeviceFlow(out io.Writer, strategy token.AuthStrategy) (string, error) {
+	deviceCode, err := strategy.AuthorizeDevice()
+	if err != nil {
+		return "", fmt.Errorf("device authorization failed: %w", err)
+	}
+
+	fmt.Fprintln(out, "GitHub device authorization")
+	fmt.Fprintf(out, "Open: %s\n", deviceCode.VerificationURI)
+	fmt.Fprintf(out, "Code: %s\n", deviceCode.UserCode)
+	fmt.Fprintln(out, "Waiting for GitHub authorization...")
+
+	if !openBrowser(deviceCode.VerificationURI) {
+		fmt.Fprintln(out, "Browser could not be opened automatically. Continue in your browser manually.")
+	}
+
+	accessToken, err := strategy.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
+	if err != nil {
+		return "", fmt.Errorf("failed to poll access token: %w", err)
+	}
+
+	return accessToken, nil
+}
+
+func authenticateWithToken(out io.Writer, in io.Reader) (string, error) {
+	if !openBrowser(config.GitHubTokensPage) {
+		fmt.Fprintln(out, "GitHub token settings could not be opened automatically.")
+	}
+
+	fmt.Fprint(out, "Enter your GitHub personal access token: ")
+	reader := bufio.NewReader(in)
+	accessToken, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("failed to read token: %w", err)
+	}
+
+	accessToken = strings.TrimSpace(accessToken)
+	if accessToken == "" {
+		return "", fmt.Errorf("token is required")
+	}
+
+	return accessToken, nil
+}
+
+func tryOpenBrowser(url string) bool {
 	commands := []string{"xdg-open", "open", "sensible-browser"}
 	for _, cmd := range commands {
 		if err := exec.Command(cmd, url).Start(); err == nil {
-			return
+			return true
 		}
 	}
+
+	return false
 }
 
 func init() {
 	rootCmd.AddCommand(authCmd)
-	authCmd.Flags().BoolVar(&tokenFlag, "token", false, "Your personal access token")
-	authCmd.Flags().StringVar(&providerFlag, "provider", token.GitHubProvider, "OAuth provider (currently only 'github' is supported)")
+	authCmd.Flags().BoolVar(&tokenFlag, "token", false, "Enter a GitHub personal access token manually")
 }

@@ -1,22 +1,17 @@
 package token
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
 const (
 	PATProvider    = "pat"
 	GitHubProvider = "github.com"
-	GitLabProvider = "gitlab.com"
 )
 
-var AllProviders = []string{
-	GitHubProvider,
-}
+var ErrAuthRequired = errors.New("authentication required")
 
 type DeviceCodeResponse struct {
 	DeviceCode      string
@@ -68,24 +63,4 @@ func (m *Manager) GetStrategy(provider string) (AuthStrategy, error) {
 	}
 
 	return nil, fmt.Errorf("no strategy found for provider %s", provider)
-}
-
-func (m *Manager) LoadToken() (string, string, error) {
-	configDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", "", err
-	}
-
-	tokenFile := filepath.Join(configDir, ".netrc")
-	data, err := os.ReadFile(tokenFile)
-	if err != nil {
-		return "", "", err
-	}
-
-	parts := strings.SplitN(string(data), ":", 2)
-	if len(parts) != 2 || !includes(parts[0], AllProviders) {
-		return "", "", fmt.Errorf("invalid token file format")
-	}
-
-	return parts[0], parts[1], nil
 }

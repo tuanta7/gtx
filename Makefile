@@ -1,11 +1,14 @@
-.PHONY: build dev clean
+.PHONY: setup add clean build auth
 
-build:
-	go build -o tig .
+setup:
+	go install github.com/spf13/cobra-cli@latest
+	cobra-cli help
 
-auth:
-	go build -o tig .
-	./tig auth
+add:
+	cobra-cli add $(COMMAND)
 
 clean:
-	rm ./tig
+	rm ./gtx
+
+build:
+	go build -o gtx .

@@ -4,15 +4,15 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tuanta7/tig/internal/config"
-	"github.com/tuanta7/tig/internal/token"
+	"github.com/tuanta7/gtx/internal/config"
+	"github.com/tuanta7/gtx/internal/token"
 )
 
 var manager *token.Manager
 
 var rootCmd = &cobra.Command{
-	Use:   "tig",
-	Short: "Delete old commits and rewrite repository history.",
+	Use:   "gtx",
+	Short: "Git Extensions",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil
@@ -28,12 +28,6 @@ func Execute() {
 		config.GitHubDeviceCodeURL,
 		config.GitHubAccessTokenURL,
 		config.GitHubProfileEndpoint,
-	))
-
-	// Only support GitHub for now
-	manager.Register(token.NewPATStrategy(
-		token.GitHubProvider,
-		config.GitHubTokensPage,
 	))
 
 	err := rootCmd.Execute()

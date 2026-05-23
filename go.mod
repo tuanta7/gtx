@@ -1,4 +1,4 @@
-module github.com/tuanta7/tig
+module github.com/tuanta7/gtx
 
 go 1.25.3
 

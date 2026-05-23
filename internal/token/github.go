@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	"github.com/tuanta7/tig/internal/config"
 )
 
 type GitHubStrategy struct {
@@ -33,7 +31,7 @@ func (g *GitHubStrategy) Provider() string {
 
 func (g *GitHubStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {
 	bodyForm := &url.Values{}
-	bodyForm.Set("client_id", config.GitHubOAuthClientID)
+	bodyForm.Set("client_id", g.clientID)
 	bodyForm.Set("scope", "repo,read:org")
 	body := bytes.NewBufferString(bodyForm.Encode())
 
@@ -50,6 +48,10 @@ func (g *GitHubStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub device code request returned status %d", resp.StatusCode)
+	}
 
 	var deviceCode struct {
 		DeviceCode      string `json:"device_code"`
@@ -88,7 +90,7 @@ func (g *GitHubStrategy) PollAccessToken(deviceCode string, interval time.Durati
 
 func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
 	bodyForm := url.Values{}
-	bodyForm.Set("client_id", config.GitHubOAuthClientID)
+	bodyForm.Set("client_id", g.clientID)
 	bodyForm.Set("device_code", deviceCode)
 	bodyForm.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
 	body := bytes.NewBufferString(bodyForm.Encode())
@@ -106,6 +108,10 @@ func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub token request returned status %d", resp.StatusCode)
+	}
 
 	var tokenResp struct {
 		AccessToken string `json:"access_token"`
@@ -135,7 +141,7 @@ func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
 }
 
 func (g *GitHubStrategy) SaveToken(token string) error {
-	return saveToken(g.Provider(), token)
+	return saveToken(token)
 }
 
 func (g *GitHubStrategy) FetchUser(token string) (*User, error) {

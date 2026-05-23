@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/tuanta7/gtx/internal/token"
 )
 
 // profileCmd represents the profile command
@@ -15,17 +17,19 @@ var profileCmd = &cobra.Command{
 
 Examples:
   # Show current token info
-  tig profile`,
+  gtx profile`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		provider, token, err := manager.LoadToken()
+		provider, tokenValue, err := token.LoadToken()
 		if err != nil {
-			fmt.Println("Status: Not authenticated")
-			fmt.Println("Run 'tig auth' to authenticate")
-			return nil
+			if errors.Is(err, token.ErrAuthRequired) {
+				fmt.Fprintln(cmd.OutOrStdout(), "Authentication required. Run 'gtx auth'.")
+				return err
+			}
+			return fmt.Errorf("failed to load authentication token: %w", err)
 		}
 
-		maskedToken := maskToken(token)
-		fmt.Println("Token:", maskedToken)
+		maskedToken := maskToken(tokenValue)
+		fmt.Fprintln(cmd.OutOrStdout(), "Token:", maskedToken)
 
 		strategy, err := manager.GetStrategy(provider)
 		if err != nil {
@@ -33,21 +37,21 @@ Examples:
 		}
 
 		// Fetch user info from GitHub
-		user, err := strategy.FetchUser(token)
+		user, err := strategy.FetchUser(tokenValue)
 		if err != nil {
-			fmt.Println("Status: Token invalid or expired")
-			fmt.Println("Run 'tig auth' to re-authenticate")
+			fmt.Fprintln(cmd.OutOrStdout(), "Status: Token invalid or expired")
+			fmt.Fprintln(cmd.OutOrStdout(), "Run 'gtx auth' to re-authenticate")
 			return nil
 		}
 
-		fmt.Println("Status: Authenticated")
-		fmt.Printf("Provider: %s\n", provider)
-		fmt.Println("Username:", user.Login)
+		fmt.Fprintln(cmd.OutOrStdout(), "Status: Authenticated")
+		fmt.Fprintf(cmd.OutOrStdout(), "Provider: %s\n", provider)
+		fmt.Fprintln(cmd.OutOrStdout(), "Username:", user.Login)
 		if user.Name != "" {
-			fmt.Println("Name:", user.Name)
+			fmt.Fprintln(cmd.OutOrStdout(), "Name:", user.Name)
 		}
 		if user.Email != "" {
-			fmt.Println("Email:", user.Email)
+			fmt.Fprintln(cmd.OutOrStdout(), "Email:", user.Email)
 		}
 
 		return nil

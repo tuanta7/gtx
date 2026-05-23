@@ -1,7 +1,6 @@
 package netrc
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,8 +13,5 @@ func TestMachine_Format(t *testing.T) {
 		Password: "pass123",
 	}
 
-	want, _ := os.ReadFile(".netrc")
-	got := m.Format()
-
-	assert.Equal(t, want, got)
+	assert.Equal(t, "machine example.com\nlogin user\npassword pass123\n", string(m.Format()))
 }
