@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/cobra"
 	internalgit "github.com/tuanta7/gtx/internal/git"
 	"github.com/tuanta7/gtx/internal/token"

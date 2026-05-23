@@ -6,13 +6,11 @@ import (
 	"path/filepath"
 	"time"
 
-	gogit "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
-	"github.com/go-git/go-git/v6/plumbing/transport"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 )
-
-var initRepository = InitRepository
 
 type PruneOptions struct {
 	Path          string
@@ -48,7 +46,7 @@ func (r *Repository) Prune(options PruneOptions) error {
 		return fmt.Errorf("%s: %w", message, cause)
 	}
 
-	repo, err := initRepository(options.Path, options.BranchName)
+	repo, err := InitRepository(options.Path, options.BranchName)
 	if err != nil {
 		return restore(err, "failed to initialize replacement repository")
 	}
