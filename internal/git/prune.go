@@ -23,7 +23,7 @@ type PruneOptions struct {
 }
 
 func (r *Repository) Prune(options PruneOptions) error {
-	signature, err := r.commitSignature()
+	signature, err := r.CommitSignature()
 	if err != nil {
 		// failed quickly
 		return err

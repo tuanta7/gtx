@@ -130,7 +130,26 @@ func (r *Repository) CheckoutBranch(branchName, remoteName string) error {
 	})
 }
 
-func (r *Repository) commitSignature() (*object.Signature, error) {
+func (r *Repository) Commit(message string, signature *object.Signature) (plumbing.Hash, error) {
+	worktree, err := r.Worktree()
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+
+	if signature == nil {
+		signature, err = r.CommitSignature()
+		if err != nil {
+			return plumbing.ZeroHash, err
+		}
+	}
+
+	return worktree.Commit(message, &gogit.CommitOptions{
+		Author:    signature,
+		Committer: signature,
+	})
+}
+
+func (r *Repository) CommitSignature() (*object.Signature, error) {
 	cfg, err := r.Config()
 	if err == nil {
 		name := coalesce(cfg.Author.Name, cfg.User.Name, cfg.Committer.Name)
