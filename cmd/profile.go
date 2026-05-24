@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tuanta7/gtx/internal/token"
+	"github.com/tuanta7/gtx/internal/auth"
 )
 
 // profileCmd represents the profile command
@@ -19,9 +19,9 @@ Examples:
   # Show current token info
   gtx profile`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		provider, tokenValue, err := token.LoadToken()
+		_, tokenValue, err := auth.LoadToken()
 		if err != nil {
-			if errors.Is(err, token.ErrAuthRequired) {
+			if errors.Is(err, auth.ErrAuthRequired) {
 				fmt.Fprintln(cmd.OutOrStdout(), "Authentication required. Run 'gtx auth'.")
 				return err
 			}
@@ -31,13 +31,10 @@ Examples:
 		maskedToken := maskToken(tokenValue)
 		fmt.Fprintln(cmd.OutOrStdout(), "Token:", maskedToken)
 
-		strategy, err := manager.GetStrategy(provider)
-		if err != nil {
-			return fmt.Errorf("failed to get strategy: %w", err)
-		}
+		github := getOrInitGitHubClient()
 
 		// Fetch user info from GitHub
-		user, err := strategy.FetchUser(tokenValue)
+		user, err := github.FetchUser(tokenValue)
 		if err != nil {
 			fmt.Fprintln(cmd.OutOrStdout(), "Status: Token invalid or expired")
 			fmt.Fprintln(cmd.OutOrStdout(), "Run 'gtx auth' to re-authenticate")
@@ -45,7 +42,7 @@ Examples:
 		}
 
 		fmt.Fprintln(cmd.OutOrStdout(), "Status: Authenticated")
-		fmt.Fprintf(cmd.OutOrStdout(), "Provider: %s\n", provider)
+		fmt.Fprintf(cmd.OutOrStdout(), "Provider: %s\n", auth.GitHubProvider)
 		fmt.Fprintln(cmd.OutOrStdout(), "Username:", user.Login)
 		if user.Name != "" {
 			fmt.Fprintln(cmd.OutOrStdout(), "Name:", user.Name)

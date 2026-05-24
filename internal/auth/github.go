@@ -1,4 +1,4 @@
-package token
+package auth
 
 import (
 	"bytes"
@@ -9,15 +9,15 @@ import (
 	"time"
 )
 
-type GitHubStrategy struct {
+type GitHubClient struct {
 	clientID       string
 	deviceCodeURL  string
 	accessTokenURL string
 	userProfileURL string
 }
 
-func NewGitHubStrategy(clientID, deviceCodeURL, accessTokenURL, userProfileURL string) *GitHubStrategy {
-	return &GitHubStrategy{
+func NewGitHubClient(clientID, deviceCodeURL, accessTokenURL, userProfileURL string) *GitHubClient {
+	return &GitHubClient{
 		clientID:       clientID,
 		deviceCodeURL:  deviceCodeURL,
 		accessTokenURL: accessTokenURL,
@@ -25,11 +25,7 @@ func NewGitHubStrategy(clientID, deviceCodeURL, accessTokenURL, userProfileURL s
 	}
 }
 
-func (g *GitHubStrategy) Provider() string {
-	return GitHubProvider
-}
-
-func (g *GitHubStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {
+func (g *GitHubClient) AuthorizeDevice() (*DeviceCodeResponse, error) {
 	bodyForm := &url.Values{}
 	bodyForm.Set("client_id", g.clientID)
 	bodyForm.Set("scope", "repo,read:org")
@@ -42,7 +38,7 @@ func (g *GitHubStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -73,7 +69,7 @@ func (g *GitHubStrategy) AuthorizeDevice() (*DeviceCodeResponse, error) {
 	}, nil
 }
 
-func (g *GitHubStrategy) PollAccessToken(deviceCode string, interval time.Duration) (string, error) {
+func (g *GitHubClient) PollAccessToken(deviceCode string, interval time.Duration) (string, error) {
 	for {
 		time.Sleep(interval)
 
@@ -88,7 +84,7 @@ func (g *GitHubStrategy) PollAccessToken(deviceCode string, interval time.Durati
 	}
 }
 
-func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
+func (g *GitHubClient) pollAccessToken(deviceCode string) (string, error) {
 	bodyForm := url.Values{}
 	bodyForm.Set("client_id", g.clientID)
 	bodyForm.Set("device_code", deviceCode)
@@ -140,11 +136,7 @@ func (g *GitHubStrategy) pollAccessToken(deviceCode string) (string, error) {
 	}
 }
 
-func (g *GitHubStrategy) SaveToken(token string) error {
-	return saveToken(token)
-}
-
-func (g *GitHubStrategy) FetchUser(token string) (*User, error) {
+func (g *GitHubClient) FetchUser(token string) (*User, error) {
 	req, err := http.NewRequest(http.MethodGet, g.userProfileURL, nil)
 	if err != nil {
 		return nil, err
@@ -159,7 +151,7 @@ func (g *GitHubStrategy) FetchUser(token string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)

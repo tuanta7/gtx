@@ -1,4 +1,4 @@
-package token
+package auth
 
 import (
 	"bytes"
@@ -10,12 +10,29 @@ import (
 	pkgnetrc "github.com/tuanta7/gtx/pkg/netrc"
 )
 
-const netrcLogin = "oauth2"
+const (
+	GitHubProvider = "github.com"
+	netrcLogin     = "oauth2"
+)
 
-var userHomeDir = os.UserHomeDir
+var ErrAuthRequired = errors.New("authentication required")
 
-func saveToken(token string) error {
-	homeDir, err := userHomeDir()
+type DeviceCodeResponse struct {
+	DeviceCode      string
+	UserCode        string
+	VerificationURI string
+	ExpiresIn       int
+	Interval        int
+}
+
+type User struct {
+	Login string `json:"login"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+func SaveToken(token string) error {
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
@@ -34,7 +51,7 @@ func saveToken(token string) error {
 }
 
 func LoadToken() (string, string, error) {
-	homeDir, err := userHomeDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", "", err
 	}
@@ -49,7 +66,7 @@ func LoadToken() (string, string, error) {
 	}
 
 	if provider, token, ok := parseLegacyToken(data); ok {
-		if err := saveToken(token); err != nil {
+		if err := SaveToken(token); err != nil {
 			return "", "", err
 		}
 		return provider, token, nil

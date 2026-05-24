@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/tuanta7/gtx/internal/auth"
 	"github.com/tuanta7/gtx/internal/config"
-	"github.com/tuanta7/gtx/internal/token"
 )
 
 var tokenFlag bool
@@ -28,30 +28,28 @@ Use --token only when you need to enter a personal access token manually.`,
   # Authenticate using a personal access token
   gtx auth --token`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		strategy, err := manager.GetStrategy(token.GitHubProvider)
-		if err != nil {
-			return fmt.Errorf("failed to get GitHub auth strategy: %w", err)
-		}
+		github := getOrInitGitHubClient()
 
 		var accessToken string
+		var err error
 		if tokenFlag {
 			accessToken, err = authenticateWithToken(cmd.OutOrStdout(), cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
 		} else {
-			accessToken, err = authenticateWithDeviceFlow(cmd.OutOrStdout(), strategy)
+			accessToken, err = authenticateWithDeviceFlow(cmd.OutOrStdout(), github)
 			if err != nil {
 				return err
 			}
 		}
 
-		user, err := strategy.FetchUser(accessToken)
+		user, err := github.FetchUser(accessToken)
 		if err != nil {
 			return fmt.Errorf("failed to validate GitHub token: %w", err)
 		}
 
-		if err := strategy.SaveToken(accessToken); err != nil {
+		if err := auth.SaveToken(accessToken); err != nil {
 			return fmt.Errorf("failed to save GitHub token: %w", err)
 		}
 
@@ -60,8 +58,8 @@ Use --token only when you need to enter a personal access token manually.`,
 	},
 }
 
-func authenticateWithDeviceFlow(out io.Writer, strategy token.AuthStrategy) (string, error) {
-	deviceCode, err := strategy.AuthorizeDevice()
+func authenticateWithDeviceFlow(out io.Writer, github *auth.GitHubClient) (string, error) {
+	deviceCode, err := github.AuthorizeDevice()
 	if err != nil {
 		return "", fmt.Errorf("device authorization failed: %w", err)
 	}
@@ -75,7 +73,7 @@ func authenticateWithDeviceFlow(out io.Writer, strategy token.AuthStrategy) (str
 		fmt.Fprintln(out, "Browser could not be opened automatically. Continue in your browser manually.")
 	}
 
-	accessToken, err := strategy.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
+	accessToken, err := github.PollAccessToken(deviceCode.DeviceCode, time.Duration(deviceCode.Interval)*time.Second)
 	if err != nil {
 		return "", fmt.Errorf("failed to poll access token: %w", err)
 	}

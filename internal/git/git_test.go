@@ -85,14 +85,24 @@ func TestPruneExcludesBackupGitDirectoryFromCommit(t *testing.T) {
 func createRemoteRepo(t *testing.T, path string) {
 	t.Helper()
 
-	_, err := gogit.PlainInit(path, true, gogit.WithDefaultBranch(plumbing.NewBranchReferenceName("main")))
+	_, err := gogit.PlainInitWithOptions(path, &gogit.PlainInitOptions{
+		Bare: true,
+		InitOptions: gogit.InitOptions{
+			DefaultBranch: plumbing.NewBranchReferenceName("main"),
+		},
+	})
 	require.NoError(t, err)
 }
 
 func createLocalRepo(t *testing.T, path, branch string) *gogit.Repository {
 	t.Helper()
 
-	repo, err := gogit.PlainInit(path, false, gogit.WithDefaultBranch(plumbing.NewBranchReferenceName(branch)))
+	repo, err := gogit.PlainInitWithOptions(path, &gogit.PlainInitOptions{
+		Bare: false,
+		InitOptions: gogit.InitOptions{
+			DefaultBranch: plumbing.NewBranchReferenceName(branch),
+		},
+	})
 	require.NoError(t, err)
 
 	cfg, err := repo.Config()

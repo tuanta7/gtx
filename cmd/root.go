@@ -4,11 +4,11 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/tuanta7/gtx/internal/auth"
 	"github.com/tuanta7/gtx/internal/config"
-	"github.com/tuanta7/gtx/internal/token"
 )
 
-var manager *token.Manager
+var ghClient *auth.GitHubClient
 
 var rootCmd = &cobra.Command{
 	Use:   "gtx",
@@ -22,13 +22,7 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	manager = token.NewManager()
-	manager.Register(token.NewGitHubStrategy(
-		config.GitHubOAuthClientID,
-		config.GitHubDeviceCodeURL,
-		config.GitHubAccessTokenURL,
-		config.GitHubProfileEndpoint,
-	))
+	getOrInitGitHubClient()
 
 	err := rootCmd.Execute()
 	if err != nil {
@@ -46,4 +40,17 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func getOrInitGitHubClient() *auth.GitHubClient {
+	if ghClient == nil {
+		ghClient = auth.NewGitHubClient(
+			config.GitHubOAuthClientID,
+			config.GitHubDeviceCodeURL,
+			config.GitHubAccessTokenURL,
+			config.GitHubProfileEndpoint,
+		)
+	}
+
+	return ghClient
 }

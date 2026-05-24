@@ -12,20 +12,6 @@ The primary purpose of this tool is to automate these actions:
 
 ## Usage
 
-### One-time Profile Commit
-
-### Reset History
-
-```shell
-rm -rf .git
-git init
-git add .
-git commit -m <initial commit message>
-git branch -M <new branch name>
-git remote add origin <remote repository URL>
-git push -u --force origin <new branch name>
-```
-
 ### Redo Last Commit
 
 ```shell

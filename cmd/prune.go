@@ -11,8 +11,8 @@ import (
 
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/cobra"
+	"github.com/tuanta7/gtx/internal/auth"
 	internalgit "github.com/tuanta7/gtx/internal/git"
-	"github.com/tuanta7/gtx/internal/token"
 )
 
 var (
@@ -118,9 +118,9 @@ func pushAuthForRemote(remoteURL string, out io.Writer) (*githttp.BasicAuth, err
 		return nil, nil
 	}
 
-	_, tokenValue, err := token.LoadToken()
+	_, tokenValue, err := auth.LoadToken()
 	if err != nil {
-		if errors.Is(err, token.ErrAuthRequired) {
+		if errors.Is(err, auth.ErrAuthRequired) {
 			fmt.Fprintln(out, "Authentication required. Run 'gtx auth'.")
 			return nil, err
 		}
