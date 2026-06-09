@@ -8,11 +8,14 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/object"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/cobra"
 	"github.com/tuanta7/gtx/internal/auth"
 	internalgit "github.com/tuanta7/gtx/internal/git"
+	"github.com/tuanta7/gtx/internal/profile"
 )
 
 var (
@@ -21,6 +24,7 @@ var (
 	pruneRemoteURL string
 	pruneBranch    string
 	pruneMessage   string
+	pruneProfile   string
 	pruneYes       bool
 )
 
@@ -36,6 +40,7 @@ type pruneInput struct {
 	RemoteURL     string
 	BranchName    string
 	CommitMessage string
+	Signature     *object.Signature
 	ForcePush     bool
 }
 
@@ -67,7 +72,7 @@ WARNING: This operation is destructive and can force-push rewritten history.`,
 			yes: pruneYes,
 		}
 
-		input, repo, err := buildPruneInput(path, pruneRemote, pruneRemoteURL, pruneBranch, pruneMessage, &prompt)
+		input, repo, err := buildPruneInput(path, pruneRemote, pruneRemoteURL, pruneBranch, pruneMessage, pruneProfile, &prompt)
 		if err != nil {
 			return err
 		}
@@ -75,6 +80,9 @@ WARNING: This operation is destructive and can force-push rewritten history.`,
 		fmt.Fprintf(prompt.out, "Repository path: %s\n", input.Path)
 		fmt.Fprintf(prompt.out, "Branch name: %s\n", input.BranchName)
 		fmt.Fprintf(prompt.out, "Commit message: %s\n", input.CommitMessage)
+		if input.Signature != nil {
+			fmt.Fprintf(prompt.out, "Commit profile: %s <%s>\n", input.Signature.Name, input.Signature.Email)
+		}
 		fmt.Fprintf(prompt.out, "Remote name: %s\n", input.RemoteName)
 		fmt.Fprintf(prompt.out, "Origin URL: %s\n", input.RemoteURL)
 		if input.ForcePush {
@@ -97,6 +105,7 @@ WARNING: This operation is destructive and can force-push rewritten history.`,
 			RemoteURL:     input.RemoteURL,
 			BranchName:    input.BranchName,
 			CommitMessage: input.CommitMessage,
+			Signature:     input.Signature,
 			ForcePush:     input.ForcePush,
 			Auth:          pushAuth,
 		}); err != nil {
@@ -133,7 +142,7 @@ func pushAuthForRemote(remoteURL string, out io.Writer) (*githttp.BasicAuth, err
 	}, nil
 }
 
-func buildPruneInput(path, remoteName, remoteURL, branchName, commitMessage string, prompt *promptSession) (pruneInput, *internalgit.Repository, error) {
+func buildPruneInput(path, remoteName, remoteURL, branchName, commitMessage, profileID string, prompt *promptSession) (pruneInput, *internalgit.Repository, error) {
 	pathValue, err := prompt.promptText("Repository path", path)
 	if err != nil {
 		return pruneInput{}, nil, err
@@ -180,6 +189,11 @@ func buildPruneInput(path, remoteName, remoteURL, branchName, commitMessage stri
 		return pruneInput{}, nil, err
 	}
 
+	signature, err := resolvePruneSignature(profileID)
+	if err != nil {
+		return pruneInput{}, nil, err
+	}
+
 	defaultRemoteURL := remoteURL
 	if defaultRemoteURL == "" {
 		defaultRemoteURL, err = repo.GetRemoteURL(remoteName)
@@ -204,8 +218,32 @@ func buildPruneInput(path, remoteName, remoteURL, branchName, commitMessage stri
 		RemoteURL:     originURL,
 		BranchName:    branchValue,
 		CommitMessage: commitValue,
+		Signature:     signature,
 		ForcePush:     forcePush,
 	}, repo, nil
+}
+
+func resolvePruneSignature(profileID string) (*object.Signature, error) {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil, nil
+	}
+
+	cfg, err := profile.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	p, ok := cfg.Get(profileID)
+	if !ok {
+		return nil, fmt.Errorf("profile %q not found", profileID)
+	}
+
+	return &object.Signature{
+		Name:  p.Name,
+		Email: p.Email,
+		When:  time.Now(),
+	}, nil
 }
 
 func resolvePrunePath(flagValue string) (string, error) {
@@ -315,5 +353,6 @@ func init() {
 	pruneCmd.Flags().StringVar(&pruneRemoteURL, "origin-url", "", "Origin URL to clone from or reconfigure before pushing")
 	pruneCmd.Flags().StringVarP(&pruneBranch, "branch", "b", "", "Branch name to rewrite (default: current or remote HEAD branch)")
 	pruneCmd.Flags().StringVarP(&pruneMessage, "message", "m", "chore: reinit project", "Commit message for the new initial commit")
+	pruneCmd.Flags().StringVar(&pruneProfile, "profile", "", "Shadow profile ID to use for the replacement commit")
 	pruneCmd.Flags().BoolVarP(&pruneYes, "yes", "y", false, "Use the default answer for every prompt")
 }

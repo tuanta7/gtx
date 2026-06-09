@@ -9,6 +9,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
@@ -18,15 +19,20 @@ type PruneOptions struct {
 	RemoteURL     string
 	BranchName    string
 	CommitMessage string
+	Signature     *object.Signature
 	ForcePush     bool
 	Auth          transport.AuthMethod
 }
 
 func (r *Repository) Prune(options PruneOptions) error {
-	signature, err := r.CommitSignature()
-	if err != nil {
-		// failed quickly
-		return err
+	signature := options.Signature
+	if signature == nil {
+		var err error
+		signature, err = r.CommitSignature()
+		if err != nil {
+			// failed quickly
+			return err
+		}
 	}
 
 	liveGitPath := filepath.Join(options.Path, ".git")

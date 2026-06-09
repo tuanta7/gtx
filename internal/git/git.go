@@ -18,9 +18,14 @@ var (
 	ErrBranchNotFound     = errors.New("git branch not found")
 )
 
+type Author struct {
+	Name  string
+	Email string
+}
+
 type Repository struct {
 	*gogit.Repository
-	globalConfig *config.Config
+	author Author
 }
 
 func OpenRepository(path string) (*Repository, error) {
@@ -32,11 +37,9 @@ func OpenRepository(path string) (*Repository, error) {
 		return nil, err
 	}
 
-	globalConfig, _ := config.LoadConfig(config.GlobalScope)
-
 	return &Repository{
-		Repository:   repo,
-		globalConfig: globalConfig,
+		Repository: repo,
+		author:     getAuthor(),
 	}, nil
 }
 
@@ -49,12 +52,20 @@ func CloneRepository(path, remoteName, remoteURL string) (*Repository, error) {
 		return nil, err
 	}
 
-	globalConfig, _ := config.LoadConfig(config.GlobalScope)
-
 	return &Repository{
-		Repository:   repo,
-		globalConfig: globalConfig,
+		Repository: repo,
+		author:     getAuthor(),
 	}, nil
+}
+
+func getAuthor() Author {
+	localConfig, _ := config.LoadConfig(config.LocalScope)
+	if author := getAuthorFromConfig(localConfig); author.Name != "" && author.Email != "" {
+		return author
+	}
+
+	globalConfig, _ := config.LoadConfig(config.GlobalScope)
+	return getAuthorFromConfig(globalConfig)
 }
 
 func InitRepository(path, branchName string) (*Repository, error) {
@@ -68,11 +79,9 @@ func InitRepository(path, branchName string) (*Repository, error) {
 		return nil, err
 	}
 
-	globalConfig, _ := config.LoadConfig(config.GlobalScope)
-
 	return &Repository{
-		Repository:   repo,
-		globalConfig: globalConfig,
+		Repository: repo,
+		author:     getAuthor(),
 	}, nil
 }
 
@@ -150,30 +159,26 @@ func (r *Repository) Commit(message string, signature *object.Signature) (plumbi
 }
 
 func (r *Repository) CommitSignature() (*object.Signature, error) {
-	cfg, err := r.Config()
-	if err == nil {
-		name := coalesce(cfg.Author.Name, cfg.User.Name, cfg.Committer.Name)
-		email := coalesce(cfg.Author.Email, cfg.User.Email, cfg.Committer.Email)
-		if name != "" && email != "" {
-			return &object.Signature{
-				Name:  name,
-				Email: email,
-				When:  time.Now(),
-			}, nil
-		}
-
-		if r.globalConfig != nil && r.globalConfig.User.Name != "" && r.globalConfig.User.Email != "" {
-			return &object.Signature{
-				Name:  r.globalConfig.User.Name,
-				Email: r.globalConfig.User.Email,
-				When:  time.Now(),
-			}, nil
-		}
-
-		return nil, fmt.Errorf("author/committer name and email not found in git config")
+	if r.author.Name != "" && r.author.Email != "" {
+		return &object.Signature{
+			Name:  r.author.Name,
+			Email: r.author.Email,
+			When:  time.Now(),
+		}, nil
 	}
 
-	return nil, fmt.Errorf("failed to determine commit signature: %w", err)
+	return nil, fmt.Errorf("author/committer name and email not found in git config")
+}
+
+func getAuthorFromConfig(cfg *config.Config) Author {
+	if cfg == nil {
+		return Author{}
+	}
+
+	return Author{
+		Name:  coalesce(cfg.Author.Name, cfg.User.Name, cfg.Committer.Name),
+		Email: coalesce(cfg.Author.Email, cfg.User.Email, cfg.Committer.Email),
+	}
 }
 
 func coalesce(values ...string) string {

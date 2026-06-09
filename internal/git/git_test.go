@@ -71,6 +71,8 @@ func TestPruneExcludesBackupGitDirectoryFromCommit(t *testing.T) {
 
 	commit, err := prunedRepo.CommitObject(head.Hash())
 	require.NoError(t, err)
+	require.Equal(t, "test", commit.Author.Name)
+	require.Equal(t, "test@example.com", commit.Author.Email)
 
 	tree, err := commit.Tree()
 	require.NoError(t, err)
@@ -80,6 +82,70 @@ func TestPruneExcludesBackupGitDirectoryFromCommit(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+func TestPruneUsesProvidedSignature(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := filepath.Join(t.TempDir(), "source")
+	sourceRepo := createLocalRepo(t, sourcePath, "main")
+	commitFile(t, sourceRepo, sourcePath, "file.txt", "before", "before rewrite")
+
+	repo, err := OpenRepository(sourcePath)
+	require.NoError(t, err)
+
+	err = repo.Prune(PruneOptions{
+		Path:          sourcePath,
+		RemoteName:    "origin",
+		RemoteURL:     "https://example.invalid/repo.git",
+		BranchName:    "main",
+		CommitMessage: "chore: reinit project",
+		Signature: &object.Signature{
+			Name:  "prune author",
+			Email: "prune@example.com",
+		},
+		ForcePush: false,
+	})
+	require.NoError(t, err)
+
+	prunedRepo, err := OpenRepository(sourcePath)
+	require.NoError(t, err)
+
+	head, err := prunedRepo.Head()
+	require.NoError(t, err)
+
+	commit, err := prunedRepo.CommitObject(head.Hash())
+	require.NoError(t, err)
+	require.Equal(t, "prune author", commit.Author.Name)
+	require.Equal(t, "prune@example.com", commit.Author.Email)
+	require.Equal(t, "prune author", commit.Committer.Name)
+	require.Equal(t, "prune@example.com", commit.Committer.Email)
+}
+
+func TestCommitSignatureFallsBackToRepositoryAuthor(t *testing.T) {
+	t.Parallel()
+
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	rawRepo, err := gogit.PlainInitWithOptions(repoPath, &gogit.PlainInitOptions{
+		Bare: false,
+		InitOptions: gogit.InitOptions{
+			DefaultBranch: plumbing.NewBranchReferenceName("main"),
+		},
+	})
+	require.NoError(t, err)
+
+	repo := &Repository{
+		Repository: rawRepo,
+		author: Author{
+			Name:  "fallback author",
+			Email: "fallback@example.com",
+		},
+	}
+
+	signature, err := repo.CommitSignature()
+	require.NoError(t, err)
+	require.Equal(t, "fallback author", signature.Name)
+	require.Equal(t, "fallback@example.com", signature.Email)
 }
 
 func createRemoteRepo(t *testing.T, path string) {
@@ -175,4 +241,27 @@ func createBranchCommitAndPush(t *testing.T, repo *gogit.Repository, remoteName,
 
 func osWriteFile(path string, content []byte) error {
 	return os.WriteFile(path, content, 0o644)
+}
+
+func TestGetAuthorFromConfigPrefersAuthorUserThenCommitter(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{}
+	cfg.Committer.Name = "committer"
+	cfg.Committer.Email = "committer@example.com"
+	require.Equal(t, Author{Name: "committer", Email: "committer@example.com"}, getAuthorFromConfig(cfg))
+
+	cfg.User.Name = "user"
+	cfg.User.Email = "user@example.com"
+	require.Equal(t, Author{Name: "user", Email: "user@example.com"}, getAuthorFromConfig(cfg))
+
+	cfg.Author.Name = "author"
+	cfg.Author.Email = "author@example.com"
+	require.Equal(t, Author{Name: "author", Email: "author@example.com"}, getAuthorFromConfig(cfg))
+}
+
+func TestGetAuthorFromConfigHandlesNilConfig(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, Author{}, getAuthorFromConfig(nil))
 }
