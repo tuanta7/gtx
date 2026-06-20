@@ -28,7 +28,7 @@ func NewGitHubClient(clientID, deviceCodeURL, accessTokenURL, userProfileURL str
 func (g *GitHubClient) AuthorizeDevice() (*DeviceCodeResponse, error) {
 	bodyForm := &url.Values{}
 	bodyForm.Set("client_id", g.clientID)
-	bodyForm.Set("scope", "repo,read:org")
+	bodyForm.Set("scope", "repo,read:org,workflow")
 	body := bytes.NewBufferString(bodyForm.Encode())
 
 	req, err := http.NewRequest(http.MethodPost, g.deviceCodeURL, body)
